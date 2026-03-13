@@ -122,9 +122,7 @@ function createSchema(database: Database.Database): void {
 
   // Add images column if it doesn't exist (migration for image attachment support)
   try {
-    database.exec(
-      `ALTER TABLE messages ADD COLUMN images TEXT`,
-    );
+    database.exec(`ALTER TABLE messages ADD COLUMN images TEXT`);
   } catch {
     /* column already exists */
   }
@@ -313,7 +311,9 @@ export function storeMessageDirect(msg: {
   );
 }
 
-function parseMessageImages(row: NewMessage & { images: string | null }): NewMessage {
+function parseMessageImages(
+  row: NewMessage & { images: string | null },
+): NewMessage {
   const { images: imagesJson, ...rest } = row;
   if (imagesJson) {
     try {
@@ -351,7 +351,9 @@ export function getNewMessages(
 
   const rows = db
     .prepare(sql)
-    .all(lastTimestamp, ...jids, `${botPrefix}:%`, limit) as Array<NewMessage & { images: string | null }>;
+    .all(lastTimestamp, ...jids, `${botPrefix}:%`, limit) as Array<
+    NewMessage & { images: string | null }
+  >;
 
   const messages = rows.map(parseMessageImages);
 
@@ -385,7 +387,9 @@ export function getMessagesSince(
   `;
   const rows = db
     .prepare(sql)
-    .all(chatJid, sinceTimestamp, `${botPrefix}:%`, limit) as Array<NewMessage & { images: string | null }>;
+    .all(chatJid, sinceTimestamp, `${botPrefix}:%`, limit) as Array<
+    NewMessage & { images: string | null }
+  >;
   return rows.map(parseMessageImages);
 }
 

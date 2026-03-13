@@ -220,11 +220,11 @@ export class WhatsAppChannel implements Channel {
 
             if (imageMsg) {
               try {
-                const buffer = await downloadMediaMessage(
+                const buffer = (await downloadMediaMessage(
                   msg,
                   'buffer',
                   {},
-                ) as Buffer;
+                )) as Buffer;
                 const mimeType = imageMsg.mimetype || 'image/jpeg';
                 const ext = MIME_TO_EXT[mimeType] || 'jpg';
                 const groupFolder = groups[chatJid].folder;
