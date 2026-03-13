@@ -47,9 +47,13 @@ interface SessionsIndex {
   entries: SessionEntry[];
 }
 
+type ContentBlock =
+  | { type: 'text'; text: string }
+  | { type: 'image'; source: { type: 'base64'; media_type: string; data: string } };
+
 interface SDKUserMessage {
   type: 'user';
-  message: { role: 'user'; content: string };
+  message: { role: 'user'; content: string | ContentBlock[] };
   parent_tool_use_id: null;
   session_id: string;
 }
@@ -57,6 +61,40 @@ interface SDKUserMessage {
 const IPC_INPUT_DIR = '/workspace/ipc/input';
 const IPC_INPUT_CLOSE_SENTINEL = path.join(IPC_INPUT_DIR, '_close');
 const IPC_POLL_MS = 500;
+
+const IMAGE_TAG_RE = /<image\s+path="([^"]*)"\s+mimetype="([^"]*)"\s*\/>/g;
+
+/**
+ * Parse <image> tags from the prompt text, read image files from the
+ * mounted group folder, and build multimodal content blocks.
+ * Returns a plain string if no images are found (avoids unnecessary wrapping).
+ */
+function buildMultimodalContent(text: string): string | ContentBlock[] {
+  const images: ContentBlock[] = [];
+  let match: RegExpExecArray | null;
+
+  IMAGE_TAG_RE.lastIndex = 0;
+  while ((match = IMAGE_TAG_RE.exec(text)) !== null) {
+    const [, relPath, mimeType] = match;
+    const absPath = path.join('/workspace/group', relPath);
+    try {
+      const data = fs.readFileSync(absPath).toString('base64');
+      images.push({
+        type: 'image',
+        source: { type: 'base64', media_type: mimeType, data },
+      });
+      log(`Loaded image: ${relPath} (${Math.round(data.length * 0.75 / 1024)}KB)`);
+    } catch (err) {
+      log(`Failed to read image ${absPath}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  if (images.length === 0) return text;
+
+  // Remove image tags from the text since they're now content blocks
+  const cleanText = text.replace(IMAGE_TAG_RE, '').trim();
+  return [...images, { type: 'text', text: cleanText }];
+}
 
 /**
  * Push-based async iterable for streaming user messages to the SDK.
@@ -68,9 +106,10 @@ class MessageStream {
   private done = false;
 
   push(text: string): void {
+    const content = buildMultimodalContent(text);
     this.queue.push({
       type: 'user',
-      message: { role: 'user', content: text },
+      message: { role: 'user', content },
       parent_tool_use_id: null,
       session_id: '',
     });

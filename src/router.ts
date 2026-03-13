@@ -16,7 +16,10 @@ export function formatMessages(
 ): string {
   const lines = messages.map((m) => {
     const displayTime = formatLocalTime(m.timestamp, timezone);
-    return `<message sender="${escapeXml(m.sender_name)}" time="${escapeXml(displayTime)}">${escapeXml(m.content)}</message>`;
+    const imageTags = m.images
+      ?.map((img) => `<image path="${escapeXml(img.path)}" mimetype="${escapeXml(img.mimeType)}" />`)
+      .join('') || '';
+    return `<message sender="${escapeXml(m.sender_name)}" time="${escapeXml(displayTime)}">${imageTags}${escapeXml(m.content)}</message>`;
   });
 
   const header = `<context timezone="${escapeXml(timezone)}" />\n`;

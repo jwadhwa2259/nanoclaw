@@ -5,6 +5,7 @@ import path from 'path';
 import makeWASocket, {
   Browsers,
   DisconnectReason,
+  downloadMediaMessage,
   WASocket,
   fetchLatestWaWebVersion,
   makeCacheableSignalKeyStore,
@@ -19,13 +20,22 @@ import {
 } from '../config.js';
 import { getLastGroupSync, setLastGroupSync, updateChatName } from '../db.js';
 import { logger } from '../logger.js';
+import { resolveGroupFolderPath } from '../group-folder.js';
 import {
   Channel,
+  ImageAttachment,
   OnInboundMessage,
   OnChatMetadata,
   RegisteredGroup,
 } from '../types.js';
 import { registerChannel, ChannelOpts } from './registry.js';
+
+const MIME_TO_EXT: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+  'image/gif': 'gif',
+};
 
 const GROUP_SYNC_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
@@ -203,6 +213,40 @@ export class WhatsAppChannel implements Channel {
           // Only deliver full message for registered groups
           const groups = this.opts.registeredGroups();
           if (groups[chatJid]) {
+            // Check for image content (imageMessage covers photos;
+            // WhatsApp protocol has no separate "photoMessage" type)
+            const imageMsg = normalized.imageMessage;
+            let images: ImageAttachment[] | undefined;
+
+            if (imageMsg) {
+              try {
+                const buffer = await downloadMediaMessage(
+                  msg,
+                  'buffer',
+                  {},
+                ) as Buffer;
+                const mimeType = imageMsg.mimetype || 'image/jpeg';
+                const ext = MIME_TO_EXT[mimeType] || 'jpg';
+                const groupFolder = groups[chatJid].folder;
+                const groupDir = resolveGroupFolderPath(groupFolder);
+                const imagesDir = path.join(groupDir, 'images');
+                fs.mkdirSync(imagesDir, { recursive: true });
+                const filename = `${Date.now()}-${(msg.key.id || 'unknown').replace(/[^a-zA-Z0-9-]/g, '')}.${ext}`;
+                const filePath = path.join(imagesDir, filename);
+                fs.writeFileSync(filePath, buffer);
+                images = [{ path: `images/${filename}`, mimeType }];
+                logger.info(
+                  { chatJid, file: filename, size: buffer.length },
+                  'Downloaded image attachment',
+                );
+              } catch (err) {
+                logger.warn(
+                  { chatJid, err },
+                  'Failed to download image, falling back to caption only',
+                );
+              }
+            }
+
             const content =
               normalized.conversation ||
               normalized.extendedTextMessage?.text ||
@@ -210,8 +254,8 @@ export class WhatsAppChannel implements Channel {
               normalized.videoMessage?.caption ||
               '';
 
-            // Skip protocol messages with no text content (encryption keys, read receipts, etc.)
-            if (!content) continue;
+            // Skip protocol messages with no text content AND no images
+            if (!content && !images) continue;
 
             const sender = msg.key.participant || msg.key.remoteJid || '';
             const senderName = msg.pushName || sender.split('@')[0];
@@ -234,6 +278,7 @@ export class WhatsAppChannel implements Channel {
               timestamp,
               is_from_me: fromMe,
               is_bot_message: isBotMessage,
+              images,
             });
           }
         } catch (err) {
