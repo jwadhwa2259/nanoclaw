@@ -93,6 +93,16 @@ function buildVolumeMounts(
       containerPath: '/workspace/group',
       readonly: false,
     });
+
+    // Departments directory (writable, shadows the read-only project mount)
+    const mainDepartmentsDir = path.join(projectRoot, 'departments');
+    if (fs.existsSync(mainDepartmentsDir)) {
+      mounts.push({
+        hostPath: mainDepartmentsDir,
+        containerPath: '/workspace/departments',
+        readonly: false,
+      });
+    }
   } else {
     // Other groups only get their own folder
     mounts.push({
@@ -109,6 +119,16 @@ function buildVolumeMounts(
         hostPath: globalDir,
         containerPath: '/workspace/global',
         readonly: true,
+      });
+    }
+
+    // Departments directory (shared across groups, read-write for dynamic department creation)
+    const departmentsDir = path.join(projectRoot, 'departments');
+    if (fs.existsSync(departmentsDir)) {
+      mounts.push({
+        hostPath: departmentsDir,
+        containerPath: '/workspace/departments',
+        readonly: false,
       });
     }
   }
