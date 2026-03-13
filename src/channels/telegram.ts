@@ -245,12 +245,10 @@ export class TelegramChannel implements Channel {
           });
         });
 
-        const ext =
-          file.file_path?.split('.').pop()?.toLowerCase() || 'jpg';
+        const ext = file.file_path?.split('.').pop()?.toLowerCase() || 'jpg';
         const mimeType =
-          Object.entries(MIME_TO_EXT).find(
-            ([, e]) => e === ext,
-          )?.[0] || 'image/jpeg';
+          Object.entries(MIME_TO_EXT).find(([, e]) => e === ext)?.[0] ||
+          'image/jpeg';
         const groupDir = resolveGroupFolderPath(group.folder);
         const imagesDir = path.join(groupDir, 'images');
         fs.mkdirSync(imagesDir, { recursive: true });
